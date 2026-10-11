@@ -28,7 +28,6 @@ targets:
         INFOPLIST_FILE: Daemon/Info.plist
         CODE_SIGN_ENTITLEMENTS: Daemon/CoolMyMacDaemon.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "G24X82SAVJ"
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_VERSION: 5.0
         MACOSX_DEPLOYMENT_TARGET: "13.0"
@@ -61,7 +60,6 @@ targets:
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/CoolMyMac.entitlements
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "G24X82SAVJ"
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_VERSION: 5.0
         MACOSX_DEPLOYMENT_TARGET: "13.0"

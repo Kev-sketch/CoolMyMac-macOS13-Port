@@ -203,11 +203,9 @@
 				LastUpgradeCheck = 1540;
 				TargetAttributes = {
 					101ED571BC2F61436B0E02F4 = {
-						DevelopmentTeam = G24X82SAVJ;
 						ProvisioningStyle = Automatic;
 					};
 					B6372F2EE5EEA9D6B593984B = {
-						DevelopmentTeam = G24X82SAVJ;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -407,7 +405,6 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = G24X82SAVJ;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				EXCLUDED_ARCHS = "";
@@ -492,7 +489,6 @@
 				COPY_PHASE_STRIP = NO;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = G24X82SAVJ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				EXCLUDED_ARCHS = "";

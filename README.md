@@ -78,13 +78,17 @@ CoolMyMac is built entirely through Xcode. The Command Line Tool and Helper Tool
 - A real signing Team ID. An ad-hoc (`-`) signature silently breaks daemon registration.
 
 ### 1. Configure Code Signing (Required)
-Because macOS requires Helper Tools installed via `SMAppService` to be code-signed by the exact same Team ID as the host app, you **must** configure code signing before building:
+macOS requires Helper Tools installed via `SMAppService` to be code-signed by the **same Team ID** as the host app. Upstream's own team ID has been stripped out of this port, so all you do is pick yours:
+
 1. Open `CoolMyMac-App/CoolMyMac.xcodeproj` in Xcode.
 2. Select the `CoolMyMac` project file in the Project Navigator.
-3. Select the `CoolMyMac` target -> **Signing & Capabilities**.
-4. Select your Personal Team or Apple Developer ID.
-5. Repeat this exact process for the `CoolMyMac-Daemon` target.
-6. Also replace the hard-coded upstream Team ID `G24X82SAVJ` — it appears in `CoolMyMac-App/project.yml` (twice, as `DEVELOPMENT_TEAM`) and in the XPC requirement string at `CoolMyMac-App/Daemon/Sources/DaemonXPCServer.swift:156`. Leaving it in place causes `SMAppService` to kill the daemon with a code-signing failure.
+3. Select the `CoolMyMac` target → **Signing & Capabilities**.
+4. Select your Personal Team (or Apple Developer ID).
+5. Repeat for the `CoolMyMac-Daemon` target — **same team**, not a different one.
+
+**That's all you need for a local build.** In Debug the daemon's client check degrades to comparing bundle identifiers only (`DaemonXPCServer.swift`, `#if DEBUG` branch), so upstream's team ID is inert during development.
+
+**For a Release build you have one extra edit.** `DaemonXPCServer.swift:156` contains the hardcoded XPC requirement `certificate leaf[subject.OU] = "G24X82SAVJ"`. Replace `G24X82SAVJ` with your own Team ID, or the daemon will reject the app's connection in release builds. The string is commented — search the file for `G24X82SAVJ`.
 
 ### 2. Build and Run
 1. Select the `CoolMyMac` scheme in the top bar.
