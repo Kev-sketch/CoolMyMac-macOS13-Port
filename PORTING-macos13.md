@@ -156,3 +156,36 @@ swiftc -typecheck -sdk "$SDK" -target x86_64-apple-macosx13.0 SMCKit/Sources/SMC
 - **Typecheck ≠ working app.** The Observation→`ObservableObject` conversion changes *when* views invalidate. `@StateObject` lifecycle and the Combine forwarding (#11) are reasoned but unexecuted. Budget for a manual smoke test on a real Mac.
 - **No installable artifact can be produced here.** The end user still needs Xcode 15.4 to actually build. If they cannot install Xcode 15.4, this port cannot be completed on this machine at all — worth confirming before investing in the full edit pass.
 - **Alternative path worth considering:** if the user only wants the app for themselves, a fork with items 1–21 applied plus their own Team ID is the practical deliverable. Upstream will likely not accept `swift-tools-version: 5.8` (it deliberately targets macOS 15 + Swift 6 concurrency), so keep this as a maintained fork rather than a PR.
+
+---
+
+## 9. Post-port fixes (macOS 13 port, after first real run)
+
+These were found running the hand-built no-Xcode bundle (`CoolMyMac-noxcode.app`) on this host
+(macOS 13.7.8) and are **not** upstream issues. The upstream code at v1.5.0 runs on macOS 15;
+the fixes below make the rendering correct on macOS 13.
+
+### Menu-bar icon clipped at the top edge (vertical layout)
+- **File:** `CoolMyMac-App/App/Sources/Views/MenuBarIconView.swift`, `drawMenuBarIcon()`
+- **Symptom:** with the default vertical layout (SF Symbol on top, temperature below), the wind
+  symbol was clipped by 1pt at the top of the 22pt menu-bar canvas.
+- **Root cause:** the vertical branch computed `symY = totalHeight - symbol.size.height + 1.0`.
+  On macOS 13 the `wind` symbol at pointSize 11 / weight medium measures **14.0 × 12.0 pt**
+  (measured with a standalone probe against MacOSX13.3.sdk), so `symY = 22 - 12 + 1 = 11`
+  and the symbol's drawing rect spans y=11..23 — one point above the 22pt canvas.
+- **Fix:** bounds-clamp the symbol into the canvas, preserving aspect:
+  `symH = min(symbol.size.height, totalHeight)`,
+  `symW = symbol.size.width * (symH / symbol.size.height)`,
+  `symX = (totalWidth - symW) / 2`, `symY = totalHeight - symH`. Applied the same clamp guard
+  to the horizontal branch (its old `(totalHeight - symbol.size.height) / 2` could go negative
+  for a taller symbol). Text drawing unchanged.
+- **Note:** upstream has the identical `+ 1.0`; it is benign on macOS 15 only because the symbol
+  measures differently there (and/or sits relative to a differently-sized item). Do not send upstream.
+
+### CLI binary missing from the hand-built bundle
+- **Symptom:** Preferences → CLI "Install Command" symlinked `/usr/local/bin/coolmymac` to
+  `Contents/MacOS/coolmymac-cli`, but that binary was never produced (SwiftPM is broken here).
+- **Fix:** `build-noxcode.sh` now builds the CLI directly with swiftc (`-parse-as-library`,
+  links the already-built SMCKit static lib + a vendored swift-argument-parser 1.4.0 source
+  drop), copies it into `Contents/MacOS/`, and ad-hoc signs it (sign order: daemon → CLI → app)
+  so app + daemon + CLI share ONE code identity from ONE build+sign run.

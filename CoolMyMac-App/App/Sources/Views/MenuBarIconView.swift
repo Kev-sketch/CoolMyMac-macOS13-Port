@@ -185,9 +185,14 @@ struct MenuBarIconView: View {
         if isVertical {
             totalWidth = ceil(max(symbol.size.width, colWidth))
             let img = NSImage(size: NSSize(width: totalWidth, height: totalHeight), flipped: false) { _ in
-                let symX = (totalWidth - symbol.size.width) / 2.0
-                let symY = totalHeight - symbol.size.height + 1.0
-                symbol.draw(in: NSRect(x: symX, y: symY, width: symbol.size.width, height: symbol.size.height))
+                // Post-port fix (macOS 13): clamp the symbol into the 22pt canvas,
+                // preserving aspect. The old `totalHeight - symbol.size.height + 1.0`
+                // pushed the top 1pt of the symbol above the canvas edge -> clipped.
+                let symH = min(symbol.size.height, totalHeight)
+                let symW = symbol.size.height > 0 ? symbol.size.width * (symH / symbol.size.height) : symbol.size.width
+                let symX = (totalWidth - symW) / 2.0
+                let symY = totalHeight - symH
+                symbol.draw(in: NSRect(x: symX, y: symY, width: symW, height: symH))
 
                 let textX = (totalWidth - textSize.width) / 2.0
                 let textY: CGFloat = 1.0
@@ -200,8 +205,12 @@ struct MenuBarIconView: View {
             let spacing: CGFloat = 3.0
             totalWidth = ceil(symbol.size.width + spacing + colWidth)
             let img = NSImage(size: NSSize(width: totalWidth, height: totalHeight), flipped: false) { _ in
-                let symY = (totalHeight - symbol.size.height) / 2.0
-                symbol.draw(in: NSRect(x: 0, y: symY, width: symbol.size.width, height: symbol.size.height))
+                // Post-port fix (macOS 13): same clamp guard — a symbol taller than
+                // the canvas would place the drawing rect below y=0 (clipped).
+                let symH = min(symbol.size.height, totalHeight)
+                let symW = symbol.size.height > 0 ? symbol.size.width * (symH / symbol.size.height) : symbol.size.width
+                let symY = (totalHeight - symH) / 2.0
+                symbol.draw(in: NSRect(x: 0, y: symY, width: symW, height: symH))
 
                 let textX = symbol.size.width + spacing + (colWidth - textSize.width) / 2.0
                 let textY = (totalHeight - textSize.height) / 2.0
