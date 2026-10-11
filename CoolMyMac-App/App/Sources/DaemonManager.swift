@@ -3,6 +3,7 @@
 
 import Foundation
 import AppKit
+import Combine
 import ServiceManagement
 import SMCKit
 import os.log

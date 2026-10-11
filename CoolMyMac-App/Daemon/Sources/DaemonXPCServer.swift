@@ -78,7 +78,7 @@ final class DaemonXPCServer: NSObject, NSXPCListenerDelegate {
 
     // MARK: - Private helpers
     
-    nonisolated(unsafe) static var activeConnectionCount = 0
+    static var activeConnectionCount = 0
     static let connectionLock = NSLock()
 
     private func accept(_ connection: NSXPCConnection, canModify: Bool = true) -> Bool {

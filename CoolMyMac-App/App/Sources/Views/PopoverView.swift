@@ -7,7 +7,7 @@ import SMCKit
 
 struct PopoverView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -176,7 +176,7 @@ struct FanRowView: View {
 
 struct PresetPickerView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
 
     // Built-in presets + up to 3 custom (only shown if defined)
     private var customProfiles: [FanProfile] { state.customProfiles }
@@ -250,7 +250,7 @@ struct PresetPill: View {
 struct DaemonWarningBar: View {
 
     var status: DaemonInstallStatus
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isDaemonBusy: Bool = false
     @State private var daemonError: String? = nil
 

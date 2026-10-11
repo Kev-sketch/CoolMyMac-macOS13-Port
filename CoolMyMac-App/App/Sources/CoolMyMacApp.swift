@@ -8,7 +8,7 @@ import ServiceManagement
 @main
 struct CoolMyMacApp: App {
 
-    @State private var state = AppState()
+    @StateObject private var state = AppState()
 
     init() {
         // Enforce single instance: prevent duplicate menu bar icons.

@@ -1,9 +1,9 @@
 name: CoolMyMac
 options:
   bundleIdPrefix: com.coolmymac
-  xcodeVersion: "16.0"
+  xcodeVersion: "15.4"
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "13.0"
   defaultConfig: Debug
   createIntermediateGroups: true
 
@@ -17,7 +17,7 @@ targets:
   CoolMyMac-Daemon:
     type: tool
     platform: macOS
-    deploymentTarget: "15.0"
+    deploymentTarget: "13.0"
     sources:
       - Daemon/Sources
     dependencies:
@@ -30,15 +30,15 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "G24X82SAVJ"
         ENABLE_HARDENED_RUNTIME: YES
-        SWIFT_VERSION: 6.0
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: 5.0
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
 
   # ─── App ───────────────────────────────────────────────────────────────────
   CoolMyMac:
     type: application
     platform: macOS
-    deploymentTarget: "15.0"
+    deploymentTarget: "13.0"
     sources:
       - App/Sources
     resources:
@@ -63,8 +63,8 @@ targets:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: "G24X82SAVJ"
         ENABLE_HARDENED_RUNTIME: YES
-        SWIFT_VERSION: 6.0
-        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        SWIFT_VERSION: 5.0
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
 
 schemes:

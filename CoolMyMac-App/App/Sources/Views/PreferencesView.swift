@@ -8,7 +8,7 @@ import ServiceManagement
 
 struct PreferencesView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
 
     @State private var selectedSection: PrefsSection = .general
@@ -70,7 +70,7 @@ struct PreferencesView: View {
 
 struct GeneralPrefsView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
     @State private var daemonError: String? = nil
     @State private var isDaemonBusy: Bool = false
@@ -294,7 +294,7 @@ struct GeneralPrefsView: View {
 
 struct ProfilesPrefsView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
     @State private var selectedProfile: FanProfile? = nil
 
@@ -471,7 +471,7 @@ struct ProfileListRow: View {
 
 struct ProfileDetailView: View {
     let profile: FanProfile
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
     var onDelete: (() -> Void)? = nil
     var onSave: ((FanProfile) -> Void)? = nil
@@ -488,7 +488,7 @@ struct ProfileDetailView: View {
 
 struct BuiltInProfileDetailView: View {
     let profile: FanProfile
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
 
     var body: some View {
@@ -567,7 +567,7 @@ struct BuiltInProfileDetailView: View {
 
 struct CustomProfileDetailView: View {
     let profile: FanProfile
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
     var onSave: ((FanProfile) -> Void)? = nil
     var onDelete: (() -> Void)? = nil
@@ -809,7 +809,7 @@ struct CurveBar: View {
 // MARK: - Sensors
 
 struct SensorsPrefsView: View {
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
     @AppStorage("decimalResolution") private var decimalResolution: Int = 0
     @State private var expandedGroups: Set<SensorGroup> = []
@@ -961,7 +961,7 @@ struct AboutPrefsView: View {
                 Text("Version \(appVersion)")
                     .foregroundStyle(.secondary)
             }
-            Text("Advanced fan control for macOS 15+")
+            Text("Advanced fan control for macOS 13+")
                 .foregroundStyle(.secondary)
                 .font(.system(size: 13))
             Spacer()
@@ -973,7 +973,7 @@ struct AboutPrefsView: View {
 struct SensorRowView: View {
     let sensor: SensorReading
     let group: SensorGroup
-    @Bindable var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
     let decimalResolution: Int
     
@@ -1011,7 +1011,7 @@ struct SensorRowView: View {
 
 struct CLIPrefsView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
     @State private var isCLIInstalled: Bool = false
 
     var body: some View {

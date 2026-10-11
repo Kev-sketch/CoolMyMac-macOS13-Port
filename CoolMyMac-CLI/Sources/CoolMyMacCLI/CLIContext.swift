@@ -148,7 +148,7 @@ enum CLIContextError: Error {
     }
 }
 
-extension SMCError: @retroactive Equatable {
+extension SMCError: Equatable {
     public static func == (lhs: SMCError, rhs: SMCError) -> Bool {
         lhs.errorDescription == rhs.errorDescription
     }

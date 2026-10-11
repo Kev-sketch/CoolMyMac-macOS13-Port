@@ -4,23 +4,22 @@
 
 import Foundation
 import AppKit
+import Combine
 import SMCKit
-import Observation
 import os.log
 import ServiceManagement
 
 private let logger = Logger(subsystem: "com.coolmymac.app", category: "AppState")
 
-@Observable
 @MainActor
-final class AppState {
+final class AppState: ObservableObject {
 
     // MARK: - Live Data
 
-    var sensors: [SensorReading] = []
-    var fans: [FanStatus] = []
-    var activeProfile: FanProfile = .balanced
-    var customProfiles: [FanProfile] = []
+    @Published var sensors: [SensorReading] = []
+    @Published var fans: [FanStatus] = []
+    @Published var activeProfile: FanProfile = .balanced
+    @Published var customProfiles: [FanProfile] = []
 
     // Derived: CPU and GPU temps for the popover tiles
     var cpuTemp: Double? { sensors.filter { $0.group == .cpuCore }.map(\.value).max() }
@@ -42,27 +41,25 @@ final class AppState {
 
     // MARK: - Daemon Status
 
-    var daemonStatus: DaemonInstallStatus = .unknown
-    var daemonVersion: String? = nil
-    var isRefreshing: Bool = false
-    var lastSensorsUpdate: Date? = nil
+    @Published var daemonStatus: DaemonInstallStatus = .unknown
+    @Published var daemonVersion: String? = nil
+    @Published var isRefreshing: Bool = false
+    @Published var lastSensorsUpdate: Date? = nil
 
     // MARK: - Settings (persisted in UserDefaults)
 
-    @ObservationIgnored
     private let defaults = UserDefaults.standard
 
-    @ObservationIgnored
     private var appActivationObserver: NSObjectProtocol?
 
-    var iconDisplayMode: IconDisplayMode = {
+    @Published var iconDisplayMode: IconDisplayMode = {
         let saved = UserDefaults.standard.string(forKey: "iconDisplayMode") ?? ""
         return IconDisplayMode(rawValue: saved) ?? .iconAndTemp
     }() {
         didSet { defaults.set(iconDisplayMode.rawValue, forKey: "iconDisplayMode") }
     }
 
-    var menuBarItemLayout: MenuBarItemLayout = {
+    @Published var menuBarItemLayout: MenuBarItemLayout = {
         let saved = UserDefaults.standard.string(forKey: "menuBarItemLayout") ?? ""
         return MenuBarItemLayout(rawValue: saved) ?? .vertical
     }() {
@@ -70,20 +67,20 @@ final class AppState {
     }
 
     // Stored (not computed) for the same reason as launchAtLogin below — a computed
-    // get/set backed directly by UserDefaults is invisible to Observation, so neither
+    // get/set backed directly by UserDefaults is invisible to the observation system, so neither
     // the toggle nor the icon's live color would update when this changed.
-    var dynamicIconEnabled: Bool = {
+    @Published var dynamicIconEnabled: Bool = {
         let defaults = UserDefaults.standard
         return defaults.object(forKey: "dynamicIconEnabled") == nil ? true : defaults.bool(forKey: "dynamicIconEnabled")
     }() {
         didSet { defaults.set(dynamicIconEnabled, forKey: "dynamicIconEnabled") }
     }
     
-    // Stored (not computed) so mutating it actually notifies Observation and re-renders
+    // Stored (not computed) so mutating it actually notifies the observation system and re-renders
     // the toggle. A computed get/set backed directly by SMAppService.mainApp.status never
     // fires a change notification — the checkbox would visually stick at whatever it showed
     // on the last unrelated re-render.
-    var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled {
+    @Published var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled {
         didSet {
             guard oldValue != launchAtLogin else { return }
             do {
@@ -110,9 +107,9 @@ final class AppState {
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 
-    var allowUnprivilegedCLI: Bool = false
-    var heavyFailsafeSpeed: Double = 0.50
-    var criticalFailsafeSpeed: Double = 1.00
+    @Published var allowUnprivilegedCLI: Bool = false
+    @Published var heavyFailsafeSpeed: Double = 0.50
+    @Published var criticalFailsafeSpeed: Double = 1.00
 
     func setAllowUnprivilegedCLI(_ allow: Bool) {
         allowUnprivilegedCLI = allow
@@ -125,7 +122,7 @@ final class AppState {
         Task { try? await client.setThermalFailsafeSpeeds(heavy: heavy, critical: critical) }
     }
     
-    var updateInterval: Double = {
+    @Published var updateInterval: Double = {
         let saved = UserDefaults.standard.double(forKey: "updateInterval")
         return saved == 0 ? 1.0 : saved
     }() {
@@ -137,7 +134,7 @@ final class AppState {
         }
     }
 
-    var activeSensors: Set<SensorGroup> = [.cpuCore, .gpu] {
+    @Published var activeSensors: Set<SensorGroup> = [.cpuCore, .gpu] {
         didSet {
             let array = Array(activeSensors)
             let excludedArray = Array(excludedSensors)
@@ -145,7 +142,7 @@ final class AppState {
         }
     }
 
-    var excludedSensors: Set<String> = [] {
+    @Published var excludedSensors: Set<String> = [] {
         didSet {
             let array = Array(activeSensors)
             let excludedArray = Array(excludedSensors)
@@ -153,7 +150,7 @@ final class AppState {
         }
     }
 
-    var decimalResolution: Int = UserDefaults.standard.integer(forKey: "decimalResolution") {
+    @Published var decimalResolution: Int = UserDefaults.standard.integer(forKey: "decimalResolution") {
         didSet { defaults.set(decimalResolution, forKey: "decimalResolution") }
     }
 
@@ -163,6 +160,7 @@ final class AppState {
     private var refreshTask: Task<Void, Never>?
     private var currentRefreshTask: Task<Void, Never>?
     var updateChecker = UpdateChecker()
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Lifecycle
 
@@ -170,6 +168,13 @@ final class AppState {
         syncStaticSettings()
         // Start refreshing immediately so data is preloaded
         startRefreshing()
+
+        // UpdateChecker is a nested ObservableObject, and nested changes do not propagate
+        // to AppState automatically. Forward them, or the "update available" banner in
+        // GeneralPrefsView silently stops refreshing.
+        updateChecker.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
 
         Task {
             await updateChecker.checkForUpdates()
@@ -295,7 +300,7 @@ final class AppState {
     // True once a full sweep (readAllSensors) has completed since the last time every
     // full-view surface (popover, Sensors tab) was closed. Views use this to distinguish
     // "no data for this group yet" from "this group genuinely doesn't exist on this Mac."
-    var hasFullSensorSweep: Bool = false
+    @Published var hasFullSensorSweep: Bool = false
 
     private var hasCheckedDaemonVersion = false
 
@@ -493,11 +498,10 @@ struct GitHubRelease: Codable {
 }
 
 @MainActor
-@Observable
-final class UpdateChecker {
-    var updateAvailable: Bool = false
-    var latestVersion: String = ""
-    var releaseUrl: URL? = nil
+final class UpdateChecker: ObservableObject {
+    @Published var updateAvailable: Bool = false
+    @Published var latestVersion: String = ""
+    @Published var releaseUrl: URL? = nil
     
     private let logger = Logger(subsystem: "com.coolmymac.app", category: "UpdateChecker")
     private let repoAPIUrl = URL(string: "https://api.github.com/repos/ecc521/CoolMyMac/releases/latest")!

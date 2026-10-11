@@ -35,7 +35,7 @@ final class MenuBarIconCache {
 
 struct MenuBarIconView: View {
 
-    var state: AppState
+    @ObservedObject var state: AppState
     @AppStorage("decimalResolution") private var decimalResolution: Int = 0
     @Environment(\.colorScheme) private var colorScheme
 

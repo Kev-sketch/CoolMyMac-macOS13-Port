@@ -1,10 +1,10 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 5.8
 import PackageDescription
 
 let package = Package(
     name: "CoolMyMacCLI",
     platforms: [
-        .macOS(.v15)
+        .macOS(.v13)
     ],
     dependencies: [
         .package(path: "../SMCKit"),

@@ -1,10 +1,10 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 5.8
 import PackageDescription
 
 let package = Package(
     name: "SMCKit",
     platforms: [
-        .macOS(.v15)
+        .macOS(.v13)
     ],
     products: [
         .library(
