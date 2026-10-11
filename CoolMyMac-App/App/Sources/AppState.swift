@@ -361,11 +361,13 @@ final class AppState: ObservableObject {
                 async let s = viewingAll ? client.readAllSensors() : client.readSensors()
                 async let f = client.readFans()
                 
+                // Publish fetched data even if a newer refresh() tick cancelled this task
+                // meanwhile: the 1s default cadence can be shorter than a slow first daemon
+                // round-trip (e.g. on-demand spawn), and discarding fresh data on cancel is
+                // what used to leave the UI showing nothing until a later cycle happened to land.
                 let fetchedSensors = try? await s
-                if Task.isCancelled { return }
                 
                 let fetchedFans = try? await f
-                if Task.isCancelled { return }
                 
                 if let fetchedSensors {
                     if viewingAll {
@@ -407,8 +409,11 @@ final class AppState: ObservableObject {
                     }
                 }.value
                 
-                if Task.isCancelled { return }
-                
+                // Publish the direct-SMC fallback even if a newer tick cancelled this task:
+                // while the daemon is unreachable every cycle takes ~1.7s (0.7s reachability
+                // timeout + ~1s read) — longer than the 1s default cadence — so the old
+                // cancellation guard here dropped EVERY cycle's data and the menu bar stayed
+                // stuck on the neutral "no reading yet" icon.
                 if !fallback.0.isEmpty { sensors = fallback.0 }
                 if !fallback.1.isEmpty { fans = fallback.1 }
                 activeProfile = .system

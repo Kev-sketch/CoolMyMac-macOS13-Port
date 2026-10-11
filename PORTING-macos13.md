@@ -189,3 +189,26 @@ the fixes below make the rendering correct on macOS 13.
   links the already-built SMCKit static lib + a vendored swift-argument-parser 1.4.0 source
   drop), copies it into `Contents/MacOS/`, and ad-hoc signs it (sign order: daemon → CLI → app)
   so app + daemon + CLI share ONE code identity from ONE build+sign run.
+
+### XPC client hangs forever when the helper tool is not running (pre-install)
+- **Files:** `SMCKit/Sources/SMCKit/CoolMyMacClient.swift`, `CoolMyMac-App/App/Sources/AppState.swift`
+- **Symptom:** with the daemon not installed, `AppState.refresh()` could hang forever at
+  `await client.isDaemonReachable()` and never reach its direct-SMC fallback — the menu bar
+  randomly stayed on the neutral "no reading yet" icon; `coolmymac-cli temps/fans` hung
+  indefinitely (no output, no crash).
+- **Root cause 1 (upstream):** `NSXPCConnection` does NOT invoke the error handler passed to
+  `remoteObjectProxyWithErrorHandler` when the connection invalidates, so every awaited
+  continuation (routed through `xpcCall` / `daemonVersion()` / …) was stranded forever. Worse,
+  a mach service with a stale BTM reservation but no live helper leaves the connection OPEN —
+  it never replies AND never invalidates.
+- **Root cause 2 (upstream):** `AppState.refresh()` bailed at `if Task.isCancelled { return }`
+  after its fallback read. The refresh cadence (default 1s) is shorter than the
+  unreachable-daemon path (~0.7s reachability timeout + ~1s direct SMC read), so once the
+  timeouts existed every cycle's data was discarded by the next cycle's cancellation.
+- **Fix:** (1) pending-continuation registry in `CoolMyMacClient` resumed with a descriptive
+  error on interruption/invalidation, plus per-call timeouts (reachability 0.7s, read 1.0s,
+  request 5.0s) as a backstop for open-but-silent connections, an idempotent resume-once
+  wrapper, error-resume on the nil-proxy path, and dead-connection discard on invalidation;
+  (2) `refresh()` now publishes fetched/fallback readings even when a newer refresh tick
+  cancelled the task. Verified: 3/3 launches show a live readout within ~2s with no daemon
+  installed (previously a coin flip), CLI `temps`/`fans` return in 1–2s with direct-SMC data.
