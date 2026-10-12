@@ -182,6 +182,33 @@ the fixes below make the rendering correct on macOS 13.
 - **Note:** upstream has the identical `+ 1.0`; it is benign on macOS 15 only because the symbol
   measures differently there (and/or sits relative to a differently-sized item). Do not send upstream.
 
+### Helper tool could never connect after the app was rebuilt, renamed or moved
+- **Files:** `CoolMyMac-App/Resources/com.coolmymac.app.macos13.daemon.plist` (renamed from
+  `…app.daemon.plist`), `SMCKit/Sources/SMCKit/CoolMyMacXPCProtocol.swift`,
+  `CoolMyMac-App/App/Sources/DaemonManager.swift`, `CoolMyMac-App/App/Sources/AppState.swift`,
+  `CoolMyMac-App/Daemon/Sources/DaemonXPCServer.swift`, `CoolMyMac-App/project.yml`
+- **Symptom:** the popover showed "Helper Tool disconnected." forever; `launchctl print
+  system/com.coolmymac.app.daemon` reported `job state = spawn failed`, `last exit code = 78:
+  EX_CONFIG`; `sfltool dumpbtm` showed the background-item record's parent was the cdhash of a
+  **deleted** bundle copy (`file:///private/tmp/…`), not the installed app.
+- **Root cause:** macOS keys an SMAppService/BTM registration to the registering app's code
+  identity, and will not re-parent a registered service to a different identity. Every ad-hoc
+  rebuild produces a new cdhash, so after a rebuild/rename/move the record can never resolve its
+  daemon again — and no amount of re-registering from the new app repairs it.
+- **Fix:** (1) the port now uses its **own daemon identity** — plist `Label`, `MachServices` key,
+  plist filename, daemon bundle id and `CoolMyMacXPCServiceName` are all
+  `com.coolmymac.app.macos13.daemon`, so it registers a *fresh* service instead of colliding with
+  the stale one (this also lets the port coexist with the upstream app, which keeps
+  `com.coolmymac.app.daemon`); (2) `AppState.refresh()` **self-heals**: if the helper is not
+  reachable for 3 consecutive refreshes it (re-)registers it once per launch, so this class of
+  breakage recovers automatically on the next launch.
+- **Verified:** daemon runs as root (`launchctl` state=running, root-owned
+  `/var/log/com.coolmymac.macos13.daemon*.log`), XPC reads work (`coolmymac-cli temps/fans`
+  return live data with no fallback warning), and CLI profile writes are correctly refused
+  without sudo/`Allow Unprivileged CLI`.
+- **Note:** a stale upstream-identity record may linger in System Settings → Login Items. It is
+  inert (its parent app no longer exists) and can be removed there.
+
 ### CLI binary missing from the hand-built bundle
 - **Symptom:** Preferences → CLI "Install Command" symlinked `/usr/local/bin/coolmymac` to
   `Contents/MacOS/coolmymac-cli`, but that binary was never produced (SwiftPM is broken here).

@@ -303,6 +303,13 @@ final class AppState: ObservableObject {
     @Published var hasFullSensorSweep: Bool = false
 
     private var hasCheckedDaemonVersion = false
+    // Self-healing registration state (see refresh()): the SMAppService/BTM record can
+    // outlive the app copy that created it (rebuilt or renamed bundles, deleted paths).
+    // launchd then resolves the daemon against a dead parent and fails with EX_CONFIG,
+    // leaving XPC dead until the record is re-created. We re-create it once per launch,
+    // after the unreachable state has persisted for a few refreshes.
+    private var hasAttemptedDaemonRepair = false
+    private var unreachableStreak = 0
 
     func refresh() {
         currentRefreshTask?.cancel()
@@ -324,12 +331,36 @@ final class AppState: ObservableObject {
                 // XPC reachability is the ground truth. If the daemon responds,
                 // it's running — trust this over SMAppService.status, which can
                 // lag or return stale values on macOS 26+ after approval grants.
+                unreachableStreak = 0
                 daemonStatus = .installed
             } else if baseStatus == .installed {
                 daemonStatus = .unreachable
                 hasCheckedDaemonVersion = false
             } else {
                 daemonStatus = baseStatus
+            }
+
+            // Self-heal the helper registration. SMAppService/BTM records outlive the app
+            // copy that created them (rebuilt, renamed, moved or deleted bundles), and macOS
+            // will not re-parent a registered service to a different code identity — launchd
+            // then fails to spawn the helper (EX_CONFIG) and XPC stays dead until the record
+            // is re-created. So whenever the helper isn't reachable, (re-)register it against
+            // this app once per launch, after the state has persisted for a few refreshes (a
+            // transient daemon restart, or the on-demand first spawn, must not trigger it).
+            if daemonStatus != .installed {
+                unreachableStreak += 1
+                if unreachableStreak >= 3 && !hasAttemptedDaemonRepair {
+                    hasAttemptedDaemonRepair = true
+                    logger.info("Helper not reachable (status=\(String(describing: self.daemonStatus)) after \(self.unreachableStreak) refreshes) — re-registering")
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        try? await DaemonManager.shared.repairDaemon()
+                        self.unreachableStreak = 0
+                        self.refresh()
+                    }
+                }
+            } else {
+                unreachableStreak = 0
             }
             
             logger.info("Refreshing... daemonStatus=\(String(describing: self.daemonStatus)) reachable=\(isReachable)")

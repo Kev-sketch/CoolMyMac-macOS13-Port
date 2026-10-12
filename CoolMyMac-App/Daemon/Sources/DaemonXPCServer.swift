@@ -458,7 +458,7 @@ private final class XPCHandler: NSObject, CoolMyMacXPCProtocol {
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            task.arguments = ["kickstart", "-k", "system/com.coolmymac.app.daemon"]
+            task.arguments = ["kickstart", "-k", "system/com.coolmymac.app.macos13.daemon"]
             try? task.run()
             task.waitUntilExit()
         }

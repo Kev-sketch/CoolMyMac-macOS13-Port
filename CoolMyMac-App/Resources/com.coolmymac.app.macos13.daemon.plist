@@ -2,9 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- Label must exactly match the bundle identifier -->
+    <!-- Label must exactly match the daemon bundle identifier. The macOS 13 port uses a
+         distinct identity from upstream's com.coolmymac.app.daemon so both can coexist and
+         a stale upstream-era registration can never block ours. -->
     <key>Label</key>
-    <string>com.coolmymac.app.daemon</string>
+    <string>com.coolmymac.app.macos13.daemon</string>
 
     <!-- Path to the daemon binary inside the App bundle.
          SMAppService resolves this relative to the App bundle root. -->
@@ -14,7 +16,7 @@
     <!-- XPC Mach service name — must match CoolMyMacXPCServiceName -->
     <key>MachServices</key>
     <dict>
-        <key>com.coolmymac.app.daemon</key>
+        <key>com.coolmymac.app.macos13.daemon</key>
         <true/>
     </dict>
 
@@ -35,8 +37,8 @@
 
     <!-- Standard I/O to system log -->
     <key>StandardOutPath</key>
-    <string>/var/log/com.coolmymac.daemon.log</string>
+    <string>/var/log/com.coolmymac.macos13.daemon.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/com.coolmymac.daemon.error.log</string>
+    <string>/var/log/com.coolmymac.macos13.daemon.error.log</string>
 </dict>
 </plist>

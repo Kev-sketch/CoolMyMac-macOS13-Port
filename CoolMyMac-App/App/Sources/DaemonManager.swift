@@ -15,7 +15,7 @@ final class DaemonManager: ObservableObject {
 
     static let shared = DaemonManager()
 
-    private let service = SMAppService.daemon(plistName: "com.coolmymac.app.daemon.plist")
+    private let service = SMAppService.daemon(plistName: "com.coolmymac.app.macos13.daemon.plist")
 
     // MARK: - Status
 
