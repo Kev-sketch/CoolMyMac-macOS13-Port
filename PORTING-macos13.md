@@ -161,9 +161,8 @@ swiftc -typecheck -sdk "$SDK" -target x86_64-apple-macosx13.0 SMCKit/Sources/SMC
 
 ## 9. Post-port fixes (macOS 13 port, after first real run)
 
-These were found running the hand-built no-Xcode bundle (`CoolMyMac-macOS13.app`) on this host
-(macOS 13.7.8) and are **not** upstream issues. The upstream code at v1.5.0 runs on macOS 15;
-the fixes below make the rendering correct on macOS 13.
+Found by running the no-Xcode bundle (`CoolMyMac-macOS13.app`) on this host (macOS 13.7.8). Each entry
+says whether it's specific to macOS 13 or an upstream bug the port fixes.
 
 ### Menu-bar icon clipped at the top edge (vertical layout)
 - **File:** `CoolMyMac-App/App/Sources/Views/MenuBarIconView.swift`, `drawMenuBarIcon()`
@@ -179,8 +178,8 @@ the fixes below make the rendering correct on macOS 13.
   `symX = (totalWidth - symW) / 2`, `symY = totalHeight - symH`. Applied the same clamp guard
   to the horizontal branch (its old `(totalHeight - symbol.size.height) / 2` could go negative
   for a taller symbol). Text drawing unchanged.
-- **Note:** upstream has the identical `+ 1.0`; it is benign on macOS 15 only because the symbol
-  measures differently there (and/or sits relative to a differently-sized item). Do not send upstream.
+- **Note:** upstream has the same `+ 1.0`. It's harmless on macOS 15 because the symbol measures
+  differently there. Don't send upstream.
 
 ### Helper tool could never connect after the app was rebuilt, renamed or moved
 - **Files:** `CoolMyMac-App/Resources/com.coolmymac.app.macos13.daemon.plist` (renamed from
@@ -193,29 +192,29 @@ the fixes below make the rendering correct on macOS 13.
   **deleted** bundle copy (`file:///private/tmp/…`), not the installed app.
 - **Root cause:** macOS keys an SMAppService/BTM registration to the registering app's code
   identity, and will not re-parent a registered service to a different identity. Every ad-hoc
-  rebuild produces a new cdhash, so after a rebuild/rename/move the record can never resolve its
-  daemon again — and no amount of re-registering from the new app repairs it.
-- **Fix:** (1) the port now uses its **own daemon identity** — plist `Label`, `MachServices` key,
+  rebuild produces a new cdhash, so after a rebuild, rename or move the record can no longer
+  resolve its daemon, and re-registering from the new app doesn't help.
+- **Fix:** (1) the port uses its **own daemon identity**: plist `Label`, `MachServices` key,
   plist filename, daemon bundle id and `CoolMyMacXPCServiceName` are all
-  `com.coolmymac.app.macos13.daemon`, so it registers a *fresh* service instead of colliding with
-  the stale one (this also lets the port coexist with the upstream app, which keeps
-  `com.coolmymac.app.daemon`); (2) `AppState.refresh()` **self-heals**: if the helper is not
-  reachable for 3 consecutive refreshes it (re-)registers it once per launch, so this class of
-  breakage recovers automatically on the next launch.
+  `com.coolmymac.app.macos13.daemon`, so it registers a fresh service instead of colliding with
+  the stale one. This also lets the port coexist with the upstream app, which keeps
+  `com.coolmymac.app.daemon`. (2) `AppState.refresh()` **self-heals**: if the helper is not
+  reachable for 3 consecutive refreshes it re-registers it once per launch, so the next launch
+  recovers on its own.
 - **Verified:** daemon runs as root (`launchctl` state=running, root-owned
   `/var/log/com.coolmymac.macos13.daemon*.log`), XPC reads work (`coolmymac-cli temps/fans`
-  return live data with no fallback warning), and CLI profile writes are correctly refused
-  without sudo/`Allow Unprivileged CLI`.
-- **Note:** a stale upstream-identity record may linger in System Settings → Login Items. It is
-  inert (its parent app no longer exists) and can be removed there.
+  return live data with no fallback warning), and CLI profile writes are refused without sudo or
+  `Allow Unprivileged CLI`.
+- **Note:** a stale upstream-identity record may linger in System Settings → Login Items. It's
+  inert (its parent app is gone) and can be removed there.
 
 ### CLI binary missing from the hand-built bundle
 - **Symptom:** Preferences → CLI "Install Command" symlinked `/usr/local/bin/coolmymac` to
   `Contents/MacOS/coolmymac-cli`, but that binary was never produced (SwiftPM is broken here).
-- **Fix:** `build-macOS13-port.sh` now builds the CLI directly with swiftc (`-parse-as-library`,
-  links the already-built SMCKit static lib + a vendored swift-argument-parser 1.4.0 source
-  drop), copies it into `Contents/MacOS/`, and ad-hoc signs it (sign order: daemon → CLI → app)
-  so app + daemon + CLI share ONE code identity from ONE build+sign run.
+- **Fix:** `build-macOS13-port.sh` builds the CLI directly with swiftc (`-parse-as-library`,
+  linking the already-built SMCKit static lib and a vendored swift-argument-parser 1.4.0 source
+  drop), copies it into `Contents/MacOS/`, and ad-hoc signs it (sign order: daemon, CLI, app) so
+  all three share one code identity from a single build+sign run.
 
 ### XPC client hangs forever when the helper tool is not running (pre-install)
 - **Files:** `SMCKit/Sources/SMCKit/CoolMyMacClient.swift`, `CoolMyMac-App/App/Sources/AppState.swift`
@@ -223,19 +222,19 @@ the fixes below make the rendering correct on macOS 13.
   `await client.isDaemonReachable()` and never reach its direct-SMC fallback — the menu bar
   randomly stayed on the neutral "no reading yet" icon; `coolmymac-cli temps/fans` hung
   indefinitely (no output, no crash).
-- **Root cause 1 (upstream):** `NSXPCConnection` does NOT invoke the error handler passed to
+- **Root cause 1 (upstream):** `NSXPCConnection` does not invoke the error handler passed to
   `remoteObjectProxyWithErrorHandler` when the connection invalidates, so every awaited
-  continuation (routed through `xpcCall` / `daemonVersion()` / …) was stranded forever. Worse,
-  a mach service with a stale BTM reservation but no live helper leaves the connection OPEN —
-  it never replies AND never invalidates.
+  continuation (routed through `xpcCall` / `daemonVersion()` / …) was stranded. A mach service
+  with a stale BTM reservation but no live helper makes it worse: the connection stays open, so
+  it never replies and never invalidates.
 - **Root cause 2 (upstream):** `AppState.refresh()` bailed at `if Task.isCancelled { return }`
   after its fallback read. The refresh cadence (default 1s) is shorter than the
   unreachable-daemon path (~0.7s reachability timeout + ~1s direct SMC read), so once the
-  timeouts existed every cycle's data was discarded by the next cycle's cancellation.
-- **Fix:** (1) pending-continuation registry in `CoolMyMacClient` resumed with a descriptive
+  timeouts existed, each cycle's data was discarded by the next cycle's cancellation.
+- **Fix:** (1) pending-continuation registry in `CoolMyMacClient`, resumed with a descriptive
   error on interruption/invalidation, plus per-call timeouts (reachability 0.7s, read 1.0s,
   request 5.0s) as a backstop for open-but-silent connections, an idempotent resume-once
   wrapper, error-resume on the nil-proxy path, and dead-connection discard on invalidation;
   (2) `refresh()` now publishes fetched/fallback readings even when a newer refresh tick
   cancelled the task. Verified: 3/3 launches show a live readout within ~2s with no daemon
-  installed (previously a coin flip), CLI `temps`/`fans` return in 1–2s with direct-SMC data.
+  installed (previously a coin flip), and CLI `temps`/`fans` return in 1–2s with direct-SMC data.
