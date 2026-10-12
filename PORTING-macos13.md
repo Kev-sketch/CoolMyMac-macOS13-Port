@@ -161,7 +161,7 @@ swiftc -typecheck -sdk "$SDK" -target x86_64-apple-macosx13.0 SMCKit/Sources/SMC
 
 ## 9. Post-port fixes (macOS 13 port, after first real run)
 
-These were found running the hand-built no-Xcode bundle (`CoolMyMac-noxcode.app`) on this host
+These were found running the hand-built no-Xcode bundle (`CoolMyMac-macOS13.app`) on this host
 (macOS 13.7.8) and are **not** upstream issues. The upstream code at v1.5.0 runs on macOS 15;
 the fixes below make the rendering correct on macOS 13.
 
@@ -185,7 +185,7 @@ the fixes below make the rendering correct on macOS 13.
 ### CLI binary missing from the hand-built bundle
 - **Symptom:** Preferences → CLI "Install Command" symlinked `/usr/local/bin/coolmymac` to
   `Contents/MacOS/coolmymac-cli`, but that binary was never produced (SwiftPM is broken here).
-- **Fix:** `build-noxcode.sh` now builds the CLI directly with swiftc (`-parse-as-library`,
+- **Fix:** `build-macOS13-port.sh` now builds the CLI directly with swiftc (`-parse-as-library`,
   links the already-built SMCKit static lib + a vendored swift-argument-parser 1.4.0 source
   drop), copies it into `Contents/MacOS/`, and ad-hoc signs it (sign order: daemon → CLI → app)
   so app + daemon + CLI share ONE code identity from ONE build+sign run.
