@@ -28,6 +28,10 @@ struct CoolMyMacApp: App {
             UserDefaults.standard.set(true, forKey: "openAtLogin")
             try? ServiceManagement.SMAppService.mainApp.register()
         }
+
+        // Drop helper registrations from older service identities. A leftover registration keeps
+        // spawning its own helper, and two helpers fight over the fans.
+        DaemonManager.shared.retireLegacyRegistrations()
     }
 
     var body: some Scene {

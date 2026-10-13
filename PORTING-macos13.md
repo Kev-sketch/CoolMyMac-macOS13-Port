@@ -208,6 +208,32 @@ says whether it's specific to macOS 13 or an upstream bug the port fixes.
 - **Note:** a stale upstream-identity record may linger in System Settings → Login Items. It's
   inert (its parent app is gone) and can be removed there.
 
+### A leftover helper instance fought the current one and pegged the fans
+- **Files:** `CoolMyMac-App/Daemon/Sources/main.swift`, `CoolMyMac-App/App/Sources/DaemonManager.swift`,
+  `CoolMyMac-App/App/Sources/CoolMyMacApp.swift`, `scripts/reset-helper.sh`
+- **Symptom:** with the Balanced profile selected and the CPU around 65 °C, both fans ran at ~100%
+  (6,200–6,700 RPM). The raw SMC target (`F0Tg`) read 6,336 — the fan's maximum — while the curve at
+  that temperature asks for ~2,500. `F0Md` was 1 (manual mode), `F0Mn` still held the hardware
+  minimum, so the *floor* writes never landed and the *target* was pinned at max.
+- **Root cause:** two daemons were running — the current service
+  (`com.coolmymac.app.macos13.daemon`) and a leftover instance from the pre-rename identity
+  (`com.coolmymac.app.daemon`). Each runs its own thermal controller and caches the active profile
+  in memory, so they disagreed: the leftover had cached **Max** and rewrote the target to 100% every
+  second while the current one wrote the real curve. They overwrote each other and the fans followed
+  the higher value. The leftover also held the XPC mach service, so profile changes from the app never
+  reached the instance doing the damage — which is why switching profiles in the UI changed nothing.
+- **Fix:** (1) the daemon refuses to serve when launchd started it for a service identity other than
+  the current one — it resets the fans and exits 0, which the plist's `KeepAlive`
+  (`SuccessfulExit = false`) reads as "stay down" instead of respawning; (2) on startup it kickstarts
+  legacy service labels so an older instance still running the previous build reloads this build and
+  retires itself; (3) the app unregisters legacy service identities at launch; (4) `scripts/reset-helper.sh`
+  clears both registrations (needs sudo) when a registration is already stale.
+- **Caveat for ad-hoc builds:** macOS keys a registration to the code identity that created it and will
+  not re-parent it, so **rebuilding an ad-hoc-signed app invalidates its helper registration**, and the
+  app cannot repair that by itself. Clear the registrations once (System Settings → Login Items &
+  Extensions, or `scripts/reset-helper.sh`) and launch the app to register fresh. A signed build with a
+  stable Developer ID does not have this problem.
+
 ### CLI binary missing from the hand-built bundle
 - **Symptom:** Preferences → CLI "Install Command" symlinked `/usr/local/bin/coolmymac` to
   `Contents/MacOS/coolmymac-cli`, but that binary was never produced (SwiftPM is broken here).

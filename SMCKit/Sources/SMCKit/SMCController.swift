@@ -31,6 +31,16 @@ public final class SMCController {
         }
     }
 
+    // MARK: - Diagnostics
+
+    #if DEBUG
+    /// Diagnostic: raw fan-control SMC keys, for troubleshooting fan behaviour.
+    /// Returns (key, dataType, dataSize, bytes) tuples.
+    public func debugFanKeyDump() -> [(String, String, UInt32, [UInt8])] {
+        (provider as? AppleSMC)?.debugFanKeyDump() ?? []
+    }
+    #endif
+
     // MARK: - Temperature
 
     /// All available temperature sensor readings, filtered to non-zero values.

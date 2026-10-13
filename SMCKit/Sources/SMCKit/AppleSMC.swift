@@ -458,6 +458,21 @@ final class AppleSMC: SMCProvider {
         return d.isNaN || d.isInfinite ? 0.0 : min(max(d, -100.0), 300.0)
     }
 
+    // MARK: - Diagnostics
+
+    #if DEBUG
+    /// Diagnostic: dump the raw fan-control keys so callers can see exactly what the SMC
+    /// holds (data type included) — the difference between "we wrote a target" and
+    /// "the SMC accepted it".
+    func debugFanKeyDump() -> [(String, String, UInt32, [UInt8])] {
+        let keys = ["FS! ", "F0Md", "F1Md", "F0Mn", "F1Mn", "F0Tg", "F1Tg", "F0Ac", "F1Ac", "F0Mx", "F1Mx"]
+        return keys.compactMap { k in
+            guard let v = try? readKey(k) else { return nil }
+            return (k, v.dataType, v.dataSize, Array(v.bytes.prefix(Int(max(v.dataSize, 1)))))
+        }
+    }
+    #endif
+
     private func readKey(_ key: String) throws -> SMCVal_t {
         var inputStruct  = SMCKeyData_t()
         var outputStruct = SMCKeyData_t()

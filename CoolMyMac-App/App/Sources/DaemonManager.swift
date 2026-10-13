@@ -92,6 +92,27 @@ final class DaemonManager: ObservableObject {
 
     // MARK: - Repair
 
+    /// Service identities earlier builds of this port registered.
+    ///
+    /// macOS keys a background-item registration to the code identity of the app that created it
+    /// and will not re-parent it, so a leftover registration keeps spawning its own copy of the
+    /// helper — which then runs a second thermal controller and fights the current one over the
+    /// fans. Retiring the old identities on launch keeps exactly one helper alive.
+    private static let legacyServicePlistNames = ["com.coolmymac.app.daemon.plist"]
+
+    /// Best-effort removal of registrations left behind by earlier builds. Failures are expected
+    /// and harmless on a machine that never ran an older build.
+    func retireLegacyRegistrations() {
+        for plistName in Self.legacyServicePlistNames {
+            do {
+                try SMAppService.daemon(plistName: plistName).unregister()
+                logger.info("Retired legacy helper registration: \(plistName, privacy: .public)")
+            } catch {
+                logger.debug("No legacy registration to retire for \(plistName, privacy: .public)")
+            }
+        }
+    }
+
     func repairDaemon() async throws {
         logger.info("Repair: unregistering daemon (current status: \(String(describing: self.service.status)))")
         try? await uninstallDaemon()
