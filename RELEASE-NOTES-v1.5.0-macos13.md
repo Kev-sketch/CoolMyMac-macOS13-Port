@@ -68,3 +68,21 @@ Details in [`PORTING-macos13.md`](PORTING-macos13.md) §9.
 The application's design and implementation are the upstream authors' work:
 [ecc521/CoolMyMac](https://github.com/ecc521/CoolMyMac), GPLv3. The port is build configuration plus
 the fixes listed above.
+
+## Post-port fixes in this tag's app build
+
+Found by running the port for real (all fixed in the attached DMG):
+
+- **Fans pinned after quit.** With a non-System profile active, quitting the app left the daemon
+  driving the fans near maximum — moving the app didn't release them either. The daemon's
+  auto-suspend only covered the System profile, and it cached the active profile forever.
+  Fan control is now **client-gated**: the daemon drives fans only while the app is connected,
+  and within ~2 s of the app quitting it resets all fans to Apple auto and exits. Profile
+  changes are now re-read from disk, so a stale cache can't peg the fans.
+- **"20,000 RPM" fan readout.** Garbage SMC float reads on `F{i}Ac` (observed: 68,027 RPM on a
+  6,336-max fan) are re-read once and treated as unknown instead of being displayed.
+- **Helper identity.** The daemon registers as `com.coolmymac.app.macos13.daemon.v2` (a fresh
+  identity), and the app registers the helper itself on first launch — no Install click.
+- On ad-hoc builds the background-item subsystem can wedge after many re-registrations
+  (spawn failures with `EX_CONFIG 78`); `scripts/reset-helper.sh` (sudo) clears the stale
+  registrations, then relaunch. A Developer-ID-signed build doesn't have this problem.
