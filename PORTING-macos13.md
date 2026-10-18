@@ -289,8 +289,12 @@ says whether it's specific to macOS 13 or an upstream bug the port fixes.
   2. **The active profile is re-read from disk on every access**, so app-side profile switches take
      effect on the next poll second.
   3. **The app releases the fans on quit itself** (`applicationWillTerminate` → direct-SMC
-     `resetAllFans()`, which works unprivileged), as a deterministic backstop even if the helper
-     is unreachable or wedged.
+     `resetAllFans()`), as a backstop where unprivileged fan writes are permitted. On this
+     Intel machine the SMC silently drops fan writes from unprivileged processes (reads work,
+     `F0Md=1` and `F0Tg` writes do not), so the effective release always comes from the root
+     daemon — whose own reset lands because it runs as root. If the daemon is ever SIGKILLed
+     (e.g. the app's code seal changes under it), the fans stay pinned until something root
+     takes over; the next daemon start resets them (`ThermalController` resets on init).
   4. The daemon starts its XPC listener **before** any subprocess work (legacy-registration
      cleanup now runs off the startup path), so it can never end up alive-but-deaf.
 
