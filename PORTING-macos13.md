@@ -264,3 +264,63 @@ says whether it's specific to macOS 13 or an upstream bug the port fixes.
   (2) `refresh()` now publishes fetched/fallback readings even when a newer refresh tick
   cancelled the task. Verified: 3/3 launches show a live readout within ~2s with no daemon
   installed (previously a coin flip), and CLI `temps`/`fans` return in 1–2s with direct-SMC data.
+
+### Fans held at maximum after the app quit (the "full blast" report)
+- **Symptom:** with the helper tool connected and a non-System profile active, quitting the app
+  left the fans running near maximum indefinitely; moving the app did not release them.
+- **Root cause 1 — auto-suspend only covered System mode.** `DaemonXPCServer.checkAutoSuspend()`
+  exited only when the active profile had an empty curve (System). With `balanced` (or any custom
+  profile) cached, the daemon kept its thermal controller running after the last XPC client
+  disconnected and kept driving the fans — nothing in the app could tell it to stop, and moving
+  the app changes neither the running process nor its cached profile.
+- **Root cause 2 — the daemon's active profile was cached forever.** `ProfileStore.activeProfileID`
+  read `active_profile.txt` once and cached it for the life of the process. The app writes that
+  file when the user switches profiles, but the daemon never re-read it, so profile changes made
+  while its XPC link was dead (or before the daemon's own cache was primed) were invisible to it.
+  A stale `Max`/`balanced` cache then drove the fans at 85–100% while the UI showed "System".
+- **Root cause 3 — a "deaf" daemon.** After ad-hoc rebuilds the daemon could end up alive but not
+  serving XPC (launchd logged `Attempting to add source to main runloop, but the main thread has
+  exited` while the fan timer kept polling). Profile clicks then went nowhere.
+- **Fix:**
+  1. **Fan control is client-gated.** The daemon only drives fans while at least one XPC client is
+     connected. When the last client disconnects, it waits 1.5 s, resets all fans to Apple auto,
+     stops the thermal controller, and exits (launchd revives it on the next connect). This holds
+     for every profile — the "fans stay pinned after quit" failure mode is gone by construction.
+  2. **The active profile is re-read from disk on every access**, so app-side profile switches take
+     effect on the next poll second.
+  3. **The app releases the fans on quit itself** (`applicationWillTerminate` → direct-SMC
+     `resetAllFans()`, which works unprivileged), as a deterministic backstop even if the helper
+     is unreachable or wedged.
+  4. The daemon starts its XPC listener **before** any subprocess work (legacy-registration
+     cleanup now runs off the startup path), so it can never end up alive-but-deaf.
+
+### Fan speed displayed as "20,000 RPM"
+- **Root cause:** `AppleSMC.readRPMKey` clamped raw float reads to `[0, 20000]` as its only sanity
+  check. `F{i}Ac` reads on this machine intermittently return garbage floats (observed: 68,027 RPM
+  on a fan whose max is 6,336), which the clamp turned into "20,000 RPM" on screen.
+- **Fix:** `readFan` now re-reads once when the actual RPM exceeds the fan's own hardware maximum,
+  and treats a still-impossible reading as unknown (0) instead of showing it.
+
+### Helper daemon identity: v2 (and why)
+- macOS binds a background-item registration to the **code identity of the app that created it**
+  and will not re-parent it. Every ad-hoc rebuild produces a new identity, so a registration can
+  go stale and then refuse to spawn its daemon forever (`launchd`: spawn failed, `EX_CONFIG 78`,
+  respawning every 10 s). `unregister()` + `register()` from the app does **not** refresh the
+  binding — it re-creates the same record.
+- The port therefore uses its own daemon identity,
+  **`com.coolmymac.app.macos13.daemon.v2`** (plist label, `MachServices`, plist filename, daemon
+  bundle id, `CoolMyMacXPCServiceName`, kickstart label), and the app retires the previous
+  identities (`com.coolmymac.app.daemon`, `com.coolmymac.app.macos13.daemon`) at launch.
+- **Known environment fragility (do not re-litigate):** `SMAppService.register()` can fail with
+  `SMAppServiceErrorDomain Code=3 … code: -67062` ("code isn't signed at all") and, after heavy
+  registration churn, with `Invalid argument` while `sfltool dumpbtm` hangs — the background-item
+  subsystem wedges and needs a reboot. The app auto-registers the helper on launch when it is
+  missing, so the normal flow is: reboot → launch → helper registers itself. A properly signed
+  build (Developer ID + Xcode) does not have this problem.
+- **If the helper will not register:** run `scripts/reset-helper.sh` once (sudo) to clear the
+  stale registrations, then relaunch the app.
+
+### First-launch auto-registration
+The app now registers the helper automatically at launch when it is missing (instead of waiting
+for the Preferences → Helper Tool → Install click), and the build script's DMG step is included
+again (`[7/7]`).

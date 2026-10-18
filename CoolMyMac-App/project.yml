@@ -24,7 +24,7 @@ targets:
       - package: SMCKit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.coolmymac.app.macos13.daemon
+        PRODUCT_BUNDLE_IDENTIFIER: com.coolmymac.app.macos13.daemon.v2
         INFOPLIST_FILE: Daemon/Info.plist
         CODE_SIGN_ENTITLEMENTS: Daemon/CoolMyMacDaemon.entitlements
         CODE_SIGN_STYLE: Automatic
@@ -50,9 +50,9 @@ targets:
       - name: "Embed Daemon"
         script: |
           mkdir -p "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons"
-          rm -f "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.plist"
+          rm -f "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.v2.plist"
           rm -f "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/CoolMyMac-Daemon"
-          cp "$SRCROOT/App/Resources/com.coolmymac.app.macos13.daemon.plist" "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.plist" || cp "$SRCROOT/Resources/com.coolmymac.app.macos13.daemon.plist" "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.plist"
+          cp "$SRCROOT/App/Resources/com.coolmymac.app.macos13.daemon.v2.plist" "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.v2.plist" || cp "$SRCROOT/Resources/com.coolmymac.app.macos13.daemon.v2.plist" "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.v2.plist"
           cp "${BUILT_PRODUCTS_DIR}/CoolMyMac-Daemon" "${CONFIGURATION_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/CoolMyMac-Daemon"
     settings:
       base:

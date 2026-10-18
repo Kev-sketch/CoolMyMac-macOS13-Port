@@ -100,4 +100,4 @@ import Foundation
 // The macOS 13 port deliberately uses its own daemon identity (…macos13.daemon) rather
 // than upstream's com.coolmymac.app.daemon: it can coexist with the upstream app, and a
 // stale upstream-era background-item registration can never block ours.
-public let CoolMyMacXPCServiceName = "com.coolmymac.app.macos13.daemon"
+public let CoolMyMacXPCServiceName = "com.coolmymac.app.macos13.daemon.v2"

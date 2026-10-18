@@ -72,7 +72,7 @@ This port changes the build target and toolchain requirements only. No applicati
 
 **Verified how:** every target typechecks against `MacOSX13.3.sdk` at `-target x86_64-apple-macosx13.0` (`./scripts/verify-macos13.sh`), and the port has since been built and run on macOS 13.7.8.
 
-**Runtime-verified:** live menu-bar readout (the `ObservableObject` view-invalidation conversion works), helper daemon registered through `SMAppService` and running as `root`, XPC reads (`temps`, `fans`, `profile`), and clean daemon lifecycle. Running it turned up four real bugs, all fixed: menu-bar icon clipping, XPC calls hanging when the helper is absent, a stale helper registration that could never reconnect, and a missing CLI binary. See [`PORTING-macos13.md`](PORTING-macos13.md) §9.
+**Runtime-verified:** live menu-bar readout (the `ObservableObject` view-invalidation conversion works), helper daemon registered through `SMAppService` and running as `root`, XPC reads (`temps`, `fans`, `profile`), and clean daemon lifecycle. Running it turned up real bugs, all fixed here: menu-bar icon clipping, XPC calls hanging when the helper is absent, a stale helper registration that could never reconnect, a missing CLI binary, fans pinned after quit, a stale profile cache in the daemon, and a garbage fan-speed reading that displayed "20,000 RPM". See [`PORTING-macos13.md`](PORTING-macos13.md) §9.
 
 ## Building this port
 
@@ -112,10 +112,12 @@ The Xcode-independent check that this port actually compiles for macOS 13:
 The full analysis behind the port — every blocker, its exact location, and its fix — is kept in [`PORTING-macos13.md`](PORTING-macos13.md).
 
 ### Helper tool (daemon)
-The privileged helper registers through `SMAppService` and runs as `root` (it needs root to write fan speeds to the SMC). Two differences from upstream:
+The privileged helper registers through `SMAppService` and runs as `root` (it needs root to write fan speeds to the SMC — releasing control works unprivileged, taking it does not). Differences from upstream:
 
-- **Own daemon identity.** The port registers `com.coolmymac.app.macos13.daemon` (plist label, `MachServices` key, plist filename, daemon bundle id and `CoolMyMacXPCServiceName`), not upstream's `com.coolmymac.app.daemon`, so the two apps can't fight over one registration.
-- **Self-healing registration.** macOS binds an `SMAppService` registration to the *code identity* of the app that created it and won't re-parent it. Every ad-hoc rebuild creates a new identity, so a registration can outlive its app and never resolve again (`launchd`: `spawn failed`, `EX_CONFIG 78`). The app re-registers the helper automatically, once per launch, whenever it stays unreachable.
+- **Own daemon identity.** The port registers `com.coolmymac.app.macos13.daemon.v2` (plist label, `MachServices` key, plist filename, daemon bundle id and `CoolMyMacXPCServiceName`), not upstream's `com.coolmymac.app.daemon`, so the two apps can't fight over one registration.
+- **Auto-registration on launch.** The app registers the helper itself when it is missing — no Install click needed.
+- **Fan control is client-gated.** The daemon only drives the fans while the app is connected. Quit the app and the fans go back to Apple within ~2 seconds, whatever profile is active. The app also resets the fans directly on quit, as a backstop.
+- **Known environment fragility (ad-hoc builds only).** macOS binds a registration to the code identity of the app that created it and won't re-parent it, so after an ad-hoc rebuild the old registration can refuse to spawn (`launchd`: `EX_CONFIG 78`) — and enough re-registering wedges the background-item subsystem until the next reboot (`SMAppService` then fails with `-67062` / `Invalid argument`). Normal recovery: reboot → launch the app → it re-registers automatically. Or run `scripts/reset-helper.sh` once (sudo) and relaunch. A build signed with a real Developer ID has none of these problems.
 
 For a **Release** build, set your own Team ID (see [Building this port](#building-this-port)). The no-Xcode script signs ad-hoc and builds the daemon with `-D DEBUG`, which uses the bundle-id trust branch.
 

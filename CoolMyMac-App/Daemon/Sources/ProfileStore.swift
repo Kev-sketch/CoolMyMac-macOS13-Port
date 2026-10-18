@@ -37,21 +37,14 @@ final class ProfileStore: @unchecked Sendable {
 
     private var activeProfileID: String {
         get {
-            cacheLock.lock()
-            if let cached = _cachedActiveProfileID {
-                cacheLock.unlock()
-                return cached
-            }
-            cacheLock.unlock()
-            
+            // Always re-read from disk. The app and the daemon are separate processes: the app
+            // writes this file directly (and via XPC) when the user switches profiles, and the
+            // daemon must follow. Caching the value made the daemon ignore switches made
+            // elsewhere — a stale cached profile then kept driving the fans forever, with no
+            // way to change it while the helper was unreachable.
             let txtURL = profilesURL.deletingLastPathComponent().appendingPathComponent("active_profile.txt")
             let disk = (try? String(contentsOf: txtURL, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "system"
-            let finalDisk = disk.isEmpty ? "system" : disk
-            
-            cacheLock.lock()
-            _cachedActiveProfileID = finalDisk
-            cacheLock.unlock()
-            return finalDisk
+            return disk.isEmpty ? "system" : disk
         }
         set {
             cacheLock.lock()

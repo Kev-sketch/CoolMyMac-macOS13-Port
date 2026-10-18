@@ -14,16 +14,14 @@
 #
 # Usage:
 #   ./build-macOS13-port.sh [REPO_PATH]
-#     REPO_PATH defaults to the directory containing this script (the repo root).
-#   Env overrides: SDK, TARGET, OUT (bundle + DMG parent dir), SKIP_DMG=1.
+#     REPO_PATH defaults to the CoolMyMac repo root below.
+#   Env overrides: SDK, TARGET, OUT (bundle parent dir).
 #
 # Output:
-#   $OUT/CoolMyMac-macOS13.app   (ad-hoc signed, hand-assembled bundle)
+#   $OUT/CoolMyMac.app   (ad-hoc signed, hand-assembled bundle)
 #     Contents/MacOS/CoolMyMac                     — the menu-bar app
 #     Contents/Library/LaunchDaemons/CoolMyMac-Daemon — the privileged helper
-#     Contents/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.plist
 #     Contents/MacOS/coolmymac-cli                 — the CLI (Preferences → CLI symlinks to it)
-#   $OUT/CoolMyMac-macOS13-Port.dmg (unless SKIP_DMG=1) — drag-to-Applications installer
 #
 # Build order (all from ONE run so app + daemon + CLI share ONE code identity —
 # this is what the user's one-click "Install" of the daemon depends on):
@@ -45,15 +43,15 @@
 #     local smoke test; a release should enable it.
 set -euo pipefail
 
-REPO="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+REPO="${1:-/Users/kevinnguyen/WorkBuddy AI/2026-10-11-14-09-13/CoolMyMac}"
 SDK="${SDK:-/Library/Developer/CommandLineTools/SDKs/MacOSX13.3.sdk}"
 TARGET="${TARGET:-x86_64-apple-macosx13.0}"
 OUT="${OUT:-/tmp/coolmymac-macos13}"
 BUILD="$OUT/build"
 APP="$OUT/CoolMyMac-macOS13.app"
-# swift-argument-parser 1.4.0 source release (GitHub). Cached under $OUT (not in the
-# repo) so repeat builds work offline; downloaded once if missing.
-AP_TARBALL="${AP_TARBALL:-$OUT/swift-argument-parser-1.4.0.tar.gz}"
+# swift-argument-parser 1.4.0 source release (GitHub). Cached next to this script
+# so repeat builds work offline; downloaded once if missing.
+AP_TARBALL="${AP_TARBALL:-$(dirname "$0")/swift-argument-parser-1.4.0.tar.gz}"
 AP_URL="https://github.com/apple/swift-argument-parser/archive/refs/tags/1.4.0.tar.gz"
 AP_VERSION="1.4.0"
 
@@ -154,8 +152,8 @@ cp "$BUILD/CoolMyMac" "$APP/Contents/MacOS/CoolMyMac"
 cp "$BUILD/coolmymac-cli" "$APP/Contents/MacOS/coolmymac-cli"
 cp "$BUILD/CoolMyMac-Daemon" "$APP/Contents/Library/LaunchDaemons/CoolMyMac-Daemon"
 cp "$REPO/CoolMyMac-App/App/Info.plist" "$APP/Contents/Info.plist"
-cp "$REPO/CoolMyMac-App/Resources/com.coolmymac.app.macos13.daemon.plist" \
-   "$APP/Contents/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.plist"
+cp "$REPO/CoolMyMac-App/Resources/com.coolmymac.app.macos13.daemon.v2.plist" \
+   "$APP/Contents/Library/LaunchDaemons/com.coolmymac.app.macos13.daemon.v2.plist"
 chmod +x "$APP/Contents/MacOS/CoolMyMac" "$APP/Contents/MacOS/coolmymac-cli" \
   "$APP/Contents/Library/LaunchDaemons/CoolMyMac-Daemon"
 
@@ -177,21 +175,22 @@ codesign --verify --verbose=2 "$APP/Contents/Library/LaunchDaemons/CoolMyMac-Dae
 codesign --verify --verbose=2 "$APP/Contents/MacOS/coolmymac-cli"
 codesign --verify --verbose=2 "$APP"
 
+# --- [7/7] DMG: drag-to-Applications disk image ---
+echo ""
+echo "== [7/7] Build DMG =="
+DMG="$OUT/CoolMyMac-macOS13-Port.dmg"
+STAGE="$OUT/.dmg-stage"
+rm -rf "$STAGE" "$DMG"
+mkdir -p "$STAGE"
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname "CoolMyMac macOS 13" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null 2>&1 \
+  && rm -rf "$STAGE" \
+  && echo "DONE: $DMG" \
+  || echo "WARN: DMG step failed (the .app above is still usable)"
+
 echo ""
 echo "DONE: $APP"
 echo "Launch with:  open \"$APP\""
 echo "(It is an LSUIElement menu-bar app: look for its fan/thermometer + temperature status item,"
-echo " top-right of the menu bar. First launch registers the helper automatically.)"
-
-# --- [7/7] Optional: wrap the bundle in a drag-to-Applications DMG -----------------
-if [ "${SKIP_DMG:-0}" != "1" ]; then
-  DMG="$OUT/CoolMyMac-macOS13-Port.dmg"
-  STAGE="$(mktemp -d)"
-  echo "== [7/7] Build DMG =="
-  cp -R "$APP" "$STAGE/"
-  ln -s /Applications "$STAGE/Applications"
-  rm -f "$DMG"
-  hdiutil create -volname "CoolMyMac macOS 13" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
-  rm -rf "$STAGE"
-  echo "DONE: $DMG"
-fi
+echo " top-right of the menu bar.)"

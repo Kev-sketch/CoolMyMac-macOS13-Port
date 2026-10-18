@@ -86,17 +86,28 @@ final class DaemonXPCServer: NSObject, NSXPCListenerDelegate {
         connection.exportedObject = XPCHandler(canModify: canModify)
         
         DaemonXPCServer.connectionLock.lock()
+        let becameFirstClient = DaemonXPCServer.activeConnectionCount == 0
         DaemonXPCServer.activeConnectionCount += 1
         xpcLogger.info("Client connected. Total clients: \(DaemonXPCServer.activeConnectionCount, privacy: .public)")
         DaemonXPCServer.connectionLock.unlock()
+
+        // A connected client is what licenses fan control — resume it.
+        if becameFirstClient { ThermalController.shared.resumeControlIfIdle() }
         
         connection.invalidationHandler = {
             DaemonXPCServer.connectionLock.lock()
             DaemonXPCServer.activeConnectionCount -= 1
-            xpcLogger.info("Client disconnected. Total clients: \(DaemonXPCServer.activeConnectionCount, privacy: .public)")
+            let remaining = DaemonXPCServer.activeConnectionCount
+            xpcLogger.info("Client disconnected. Total clients: \(remaining, privacy: .public)")
             DaemonXPCServer.connectionLock.unlock()
             
-            DaemonXPCServer.checkAutoSuspend()
+            // Last client gone: give it a moment to come back (an app restart reconnects
+            // immediately), then hand the fans back and stop. Any profile — not just System.
+            if remaining == 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    DaemonXPCServer.checkAutoSuspend()
+                }
+            }
         }
         
         connection.resume()
@@ -108,14 +119,13 @@ final class DaemonXPCServer: NSObject, NSXPCListenerDelegate {
         let count = DaemonXPCServer.activeConnectionCount
         DaemonXPCServer.connectionLock.unlock()
         
-        let isSystemMode = ProfileStore.shared.getActiveProfile().curve.points.isEmpty
-        guard isSystemMode && count == 0 else { return }
+        guard count == 0 else { return }
 
-        // Ensure hardware is released to Apple control before exiting
+        // Ensure hardware is released to Apple control before exiting.
         ThermalController.shared.resetAllFansIfManaged()
 
         if !ThermalController.shared.areFansManaged {
-            xpcLogger.notice("Auto-suspending daemon: System profile active and 0 connected clients. launchd will automatically revive us when needed.")
+            xpcLogger.notice("Auto-suspending daemon: 0 connected clients. launchd will automatically revive us when needed.")
             exit(0)
         } else {
             xpcLogger.warning("Auto-suspend deferred: fans are still managed or reset failed.")
@@ -458,7 +468,7 @@ private final class XPCHandler: NSObject, CoolMyMacXPCProtocol {
         DispatchQueue.global().asyncAfter(deadline: .now() + 0.15) {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
-            task.arguments = ["kickstart", "-k", "system/com.coolmymac.app.macos13.daemon"]
+            task.arguments = ["kickstart", "-k", "system/com.coolmymac.app.macos13.daemon.v2"]
             try? task.run()
             task.waitUntilExit()
         }

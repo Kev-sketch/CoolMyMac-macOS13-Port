@@ -32,10 +32,10 @@ signal(SIGABRT, resetFansAndExit)
 
 /// The service identity this app registers. Anything else that launches this binary is a
 /// leftover from an older registration.
-let currentServiceName = "com.coolmymac.app.macos13.daemon"
+let currentServiceName = "com.coolmymac.app.macos13.daemon.v2"
 
 /// Identities earlier builds of this port registered. They are retired on startup.
-let legacyServiceNames = ["com.coolmymac.app.daemon"]
+let legacyServiceNames = ["com.coolmymac.app.daemon", "com.coolmymac.app.macos13.daemon"]
 
 /// Refuse to serve when launchd started us for a legacy service identity.
 ///
@@ -79,11 +79,18 @@ func retireLegacyServices() {
 
 logger.info("CoolMyMac-Daemon starting (version \(daemonVersionString, privacy: .public))")
 yieldIfLegacyInstance()
-retireLegacyServices()
 
-// Start the XPC listener
+// Start the XPC listener and thermal loop FIRST, then do the legacy-registration cleanup off
+// the startup path. Spawning `launchctl` (and blocking on it) before serving left this daemon
+// in a live-but-deaf state — launchd logged "Attempting to add source to main runloop, but the
+// main thread has exited" while the fan timer kept driving the fans with XPC dead, which is
+// exactly the "helper disconnected but fans pinned" state. Nothing above this line may spawn
+// or block.
 let server = DaemonXPCServer()
 server.start()
 
-// Block forever — launchd will manage the lifecycle
+DispatchQueue.global(qos: .utility).async {
+    retireLegacyServices()
+}
+
 dispatchMain()

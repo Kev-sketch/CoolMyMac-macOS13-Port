@@ -307,9 +307,19 @@ final class AppleSMC: SMCProvider {
             throw SMCError.keyNotFound("Fan index \(index) out of range (count: \(count))")
         }
 
-        let actualRPM  = Int(try readRPMKey(kFanActualRPM(index)))
         let minRPM     = Int(try readRPMKey(kFanMinRPM(index)))
         let maxRPM     = Int(try readRPMKey(kFanMaxRPM(index)))
+
+        var actualRPM  = Int(try readRPMKey(kFanActualRPM(index)))
+        // F{i}Ac reads occasionally come back as garbage floats (observed on a
+        // MacBookPro16,2: 68,027 RPM on a fan whose maximum is 6,336, and values that clamp
+        // to exactly 20,000). A reading above the fan's own hardware maximum is physically
+        // impossible — re-read once, and if it is still above the maximum treat it as
+        // unknown (0) instead of showing a nonsense speed.
+        if maxRPM > 0, actualRPM > maxRPM {
+            let reread = Int((try? readRPMKey(kFanActualRPM(index))) ?? 0)
+            actualRPM = reread <= maxRPM ? reread : 0
+        }
 
         var name = ""
         if let val = try? readKey("F\(index)ID"), !val.bytes.isEmpty {

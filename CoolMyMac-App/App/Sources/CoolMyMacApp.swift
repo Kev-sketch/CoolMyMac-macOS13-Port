@@ -5,9 +5,17 @@ import SwiftUI
 import SMCKit
 import ServiceManagement
 
+/// Guarantees the fans are handed back to Apple on quit, whatever state the helper is in.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillTerminate(_ notification: Notification) {
+        DaemonManager.shared.releaseFansOnQuit()
+    }
+}
+
 @main
 struct CoolMyMacApp: App {
 
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var state = AppState()
 
     init() {
@@ -32,6 +40,14 @@ struct CoolMyMacApp: App {
         // Drop helper registrations from older service identities. A leftover registration keeps
         // spawning its own helper, and two helpers fight over the fans.
         DaemonManager.shared.retireLegacyRegistrations()
+
+        // Register the helper automatically when it is missing, so fan control works out of
+        // the box (and survives identity migrations without a trip through Preferences).
+        Task { @MainActor in
+            if DaemonManager.shared.currentStatus() == .notInstalled {
+                try? await DaemonManager.shared.installDaemon()
+            }
+        }
     }
 
     var body: some Scene {

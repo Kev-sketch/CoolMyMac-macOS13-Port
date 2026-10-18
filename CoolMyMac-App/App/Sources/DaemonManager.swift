@@ -15,7 +15,7 @@ final class DaemonManager: ObservableObject {
 
     static let shared = DaemonManager()
 
-    private let service = SMAppService.daemon(plistName: "com.coolmymac.app.macos13.daemon.plist")
+    private let service = SMAppService.daemon(plistName: "com.coolmymac.app.macos13.daemon.v2.plist")
 
     // MARK: - Status
 
@@ -90,6 +90,25 @@ final class DaemonManager: ObservableObject {
         }
     }
 
+    // MARK: - Release on quit
+
+    /// Hand the fans back to Apple when the app terminates — whatever state the helper is in.
+    ///
+    /// This runs on every quit, even when the helper is unreachable (unregistered, spawn-failing,
+    /// or wedged). Releasing control is a plain SMC key write that works unprivileged, so the
+    /// fans can never be left pinned after the user quits. The daemon releases them again on
+    /// its side when the XPC connection drops; this is the deterministic backstop.
+    func releaseFansOnQuit() {
+        if let smc = try? SMCController() {
+            do {
+                try smc.resetAllFans()
+                logger.info("Fans released to Apple auto on quit")
+            } catch {
+                logger.error("Failed to release fans on quit: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
     // MARK: - Repair
 
     /// Service identities earlier builds of this port registered.
@@ -98,7 +117,7 @@ final class DaemonManager: ObservableObject {
     /// and will not re-parent it, so a leftover registration keeps spawning its own copy of the
     /// helper — which then runs a second thermal controller and fights the current one over the
     /// fans. Retiring the old identities on launch keeps exactly one helper alive.
-    private static let legacyServicePlistNames = ["com.coolmymac.app.daemon.plist"]
+    private static let legacyServicePlistNames = ["com.coolmymac.app.daemon.plist", "com.coolmymac.app.macos13.daemon.plist"]
 
     /// Best-effort removal of registrations left behind by earlier builds. Failures are expected
     /// and harmless on a machine that never ran an older build.

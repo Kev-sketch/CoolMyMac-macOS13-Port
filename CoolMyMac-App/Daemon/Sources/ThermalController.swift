@@ -99,6 +99,12 @@ final class ThermalController: @unchecked Sendable {
 
     // MARK: - Lifecycle
 
+    /// True once the controller has released the fans and stopped polling because no XPC
+    /// client is connected. Fans are only ever driven while a client is connected — that is
+    /// what guarantees "quit the app → fans back to Apple auto" for every profile, not just
+    /// System. `DaemonXPCServer` calls these when the client count hits 0 / returns to 1.
+    private var isIdleForNoClients = false
+
     func start() {
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: pollInterval)
@@ -106,6 +112,21 @@ final class ThermalController: @unchecked Sendable {
         t.resume()
         timer = t
         thermalLogger.info("Thermal polling started (interval: \(self.pollInterval, privacy: .public)s)")
+    }
+
+    /// Release the fans to Apple and stop polling until a client connects again.
+    func releaseControlAndIdle() {
+        stop()
+        isIdleForNoClients = true
+        thermalLogger.notice("No clients connected — fans released to Apple auto, polling stopped")
+    }
+
+    /// Resume fan control after a client connects.
+    func resumeControlIfIdle() {
+        guard isIdleForNoClients else { return }
+        isIdleForNoClients = false
+        start()
+        thermalLogger.notice("Client connected — resuming fan control")
     }
 
     func stop() {
@@ -180,6 +201,10 @@ final class ThermalController: @unchecked Sendable {
     // MARK: - Poll Cycle
 
     private func poll() {
+        // A live client is the only thing allowed to hold the fans off Apple auto. With no
+        // client connected the controller idles (timer stopped), but this guard also covers
+        // the race window between the last disconnect and the idle transition.
+        guard DaemonXPCServer.activeConnectionCount > 0 else { return }
         guard let smc = smcController else { return }
 
         let profile = ProfileStore.shared.getActiveProfile()

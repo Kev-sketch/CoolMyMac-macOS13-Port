@@ -4,9 +4,14 @@
 <dict>
     <!-- Label must exactly match the daemon bundle identifier. The macOS 13 port uses a
          distinct identity from upstream's com.coolmymac.app.daemon so both can coexist and
-         a stale upstream-era registration can never block ours. -->
+         a stale upstream-era registration can never block ours.
+         The .v2 suffix is deliberate: macOS binds a background-item registration to the
+         code identity of the app that created it and refuses to re-parent it, so a
+         registration made by an earlier ad-hoc build can never spawn the daemon again
+         (launchd: spawn failed, EX_CONFIG 78). Bumping the identity gives the port a
+         fresh, spawnable registration; the app retires the previous identity at launch. -->
     <key>Label</key>
-    <string>com.coolmymac.app.macos13.daemon</string>
+    <string>com.coolmymac.app.macos13.daemon.v2</string>
 
     <!-- Path to the daemon binary inside the App bundle.
          SMAppService resolves this relative to the App bundle root. -->
@@ -16,7 +21,7 @@
     <!-- XPC Mach service name — must match CoolMyMacXPCServiceName -->
     <key>MachServices</key>
     <dict>
-        <key>com.coolmymac.app.macos13.daemon</key>
+        <key>com.coolmymac.app.macos13.daemon.v2</key>
         <true/>
     </dict>
 
@@ -37,8 +42,8 @@
 
     <!-- Standard I/O to system log -->
     <key>StandardOutPath</key>
-    <string>/var/log/com.coolmymac.macos13.daemon.log</string>
+    <string>/var/log/com.coolmymac.macos13.daemon.v2.log</string>
     <key>StandardErrorPath</key>
-    <string>/var/log/com.coolmymac.macos13.daemon.error.log</string>
+    <string>/var/log/com.coolmymac.macos13.daemon.v2.error.log</string>
 </dict>
 </plist>
