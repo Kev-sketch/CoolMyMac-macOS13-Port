@@ -328,3 +328,27 @@ says whether it's specific to macOS 13 or an upstream bug the port fixes.
 The app now registers the helper automatically at launch when it is missing (instead of waiting
 for the Preferences → Helper Tool → Install click), and the build script's DMG step is included
 again (`[7/7]`).
+
+### Fans latched stopped by a 0 RPM target (the "Max spins nothing" report)
+- **Symptom:** popover shows 0 RPM on both fans (with the managed dots) while CPU hits 100 °C
+  and the machine throttles to 24% under load; the daemon reports its writes as successful.
+- **Root cause:** three code paths could write a literal **0** fan target, and this SMC
+  (MacBookPro16,2) treats a 0 target as "fan off" and **latches it stopped** — neither Apple's
+  own controller (verified: System mode + load → 98 °C, speed limit 24%) nor later forced
+  targets revive it without an SMC re-init (reboot):
+  1. `ThermalController`: a curve evaluated at 0% wrote `targetRPM = 0`, relying on
+     "the SMC will clamp 0 to its safe hardware minimum" — false on this hardware.
+  2. `ThermalController`: a driving temperature of 0 (no sensor readings survived the filter —
+     not "the CPU is at 0 °C") drove the curve from 0.
+  3. `AppleSMC.resetFan`: the smooth handoff wrote `F0Tg = actualRPM`; `F{i}Ac` reads flake on
+     this machine (garbage floats that decode to 0, and clean zeros while the fan is
+     demonstrably spinning), so the handoff could command 0.
+- **Fix:** (1) 0% now holds the hardware minimum; (2) `drivingTemp <= 0` holds the last target
+  instead of driving; (3) the handoff only writes a plausible positive speed, otherwise it just
+  releases manual mode.
+- **Recovery from the latch:** reboot (SMC firmware re-init). Nothing in user space revives it —
+  unprivileged fan writes are dropped by the SMC, and the root daemon's forced targets don't
+  either.
+- **Note on `F0Ac` display:** the tachometer reads return `result=0x00` with 0 bytes when the
+  fan is latched/stopped — i.e. the SMC honestly reports the stopped fan, it is not a masked
+  read failure (verified with an instrumented readKey).
