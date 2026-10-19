@@ -284,6 +284,14 @@ final class ThermalController: @unchecked Sendable {
             let drivingTemp = latestReadings.isEmpty
                 ? ((try? smc.drivingTemperature(for: settings)) ?? 0.0)
                 : SMCController.drivingTemperature(from: latestReadings, settings: settings)
+            // A driving temperature of 0 means no sensor reading survived the filter — the CPU
+            // is not at 0°C. Driving a curve from 0 evaluates to the curve's floor (or 0%),
+            // which historically wrote a 0 fan target — see the 0% note below for what that
+            // does on this hardware. Hold the last target instead of guessing.
+            guard drivingTemp > 0 else {
+                thermalLogger.error("No usable sensor readings for the active groups — holding last fan target this cycle")
+                return
+            }
             let smoothedTemp = smooth(sample: drivingTemp, settings: profile.settings)
             var targetPercentage = profile.curve.targetPercentage(for: smoothedTemp)
 
@@ -345,10 +353,14 @@ final class ThermalController: @unchecked Sendable {
                     let range = Double(fan.maxRPM - fan.minRPM)
                     var targetRPM = Int(Double(fan.minRPM) + (range * targetPercentage))
                     
-                    // If the curve evaluates to precisely 0%, attempt to shut the fan off completely.
-                    // The SMC will internally clamp this to its safe hardware minimum if 0 RPM isn't supported.
+                    // If the curve evaluates to precisely 0%, do NOT write a literal 0 target.
+                    // The old code assumed "the SMC will clamp 0 to its safe hardware minimum"
+                    // — on this machine (MacBookPro16,2) a 0 target instead latches the fan
+                    // STOPPED, and neither Apple's own controller nor later forced targets
+                    // revive it without an SMC re-init (reboot). Hold the hardware floor,
+                    // which is what the SMC clamp was supposed to guarantee anyway.
                     if targetPercentage == 0.0 {
-                        targetRPM = 0
+                        targetRPM = fan.minRPM
                     } else if targetPercentage.isNaN {
                         // Failsafe against NaN math crashing the daemon integer cast
                         targetRPM = fan.minRPM

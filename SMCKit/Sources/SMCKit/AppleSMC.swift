@@ -367,9 +367,15 @@ final class AppleSMC: SMCProvider {
         // Read the currently spinning RPM so we can hand it off smoothly.
         // If we forcefully write 0.0, the fans will physically slam their brakes 
         // for 1-2 seconds until Apple's automatic thermal loop wakes up to recalculate.
-        let actualRPM = (try? readRPMKey(kFanActualRPM(index))) ?? 0.0
-        
-        try? writeRPMKey(kFanTargetRPM(index), rpm: actualRPM)
+        // BUT: F{i}Ac reads on some machines flake — garbage floats decode to 0 and clean
+        // zeros appear while the fan is demonstrably spinning. Writing a 0 handoff target
+        // latches the fan STOPPED on those machines (proven on a MacBookPro16,2: neither
+        // Apple's controller nor later forced targets revived it without a reboot). Only
+        // hand off at a plausible positive speed; otherwise release manual mode and let
+        // the SMC keep whatever target it was already holding.
+        if let actualRPM = try? readRPMKey(kFanActualRPM(index)), actualRPM > 0 {
+            try? writeRPMKey(kFanTargetRPM(index), rpm: actualRPM)
+        }
         
         // Relinquish the manual lock. Apple's loop will seamlessly take over from the actualRPM.
         try? setFanManualMode(index: index, manual: false)
